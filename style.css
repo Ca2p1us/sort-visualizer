@@ -1,0 +1,79 @@
+body {
+    font-family: sans-serif;
+    text-align: center;
+    background-color: #101045;
+    margin-top: 50px;
+}
+
+/* 棒グラフを並べるコンテナ */
+#array-container {
+    display: flex;
+    justify-content: center;
+    align-items: center; /* 中央揃えにする */
+    margin: 20px auto;
+    gap: 0px; /* 棒同士の隙間 */
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+/* 1本1本の棒のデザイン */
+.bar {
+    flex: 1;
+    height: 100%;
+    position: relative;
+    background-repeat: no-repeat;
+    background-color: #3498db; /* 基本の色（青） */
+    border-radius: 2px 2px 0 0;
+    transition: background-color 0.1s;
+}
+
+/* 比較中の棒の色 */
+.bar.active::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(231, 76, 60, 0.5); /* 半透明の赤 */
+}
+
+/* ソート完了済みの棒の色 */
+.bar.sorted::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(46, 204, 113, 0.2); /* 半透明の緑 */
+}
+
+button, select {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #accede;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    margin: 0 5px;
+}
+
+select {
+    background-color: #accede;
+    color: white;
+    border: 1px solid #bdc3c7;
+}
+
+button:hover {
+    background-color: #a1bed0;
+}
+
+button:disabled, select:disabled {
+    background-color: #909294;
+    cursor: not-allowed;
+}
+
+h2 {
+    color: #00ff40
+}
