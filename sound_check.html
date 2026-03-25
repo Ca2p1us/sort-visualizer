@@ -1,4 +1,36 @@
-<script type="module">
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>音声パラメータ体験</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div style="text-align: left; padding: 10px 20px;">
+        <a href="index.html">⬅ ソート可視化ページへ戻る</a>
+    </div>
+
+    <h2>音声パラメータの変化を体験</h2>
+    
+    <div class="control-panel">
+        <div class="slider-group">
+            <label for="volumeSlider">音量 (Volume): <span id="volumeValue">1.0</span>倍</label>
+            <input type="range" id="volumeSlider" min="0.0" max="3.0" step="0.1" value="1.0">
+        </div>
+        
+        <div class="slider-group">
+            <label for="pitchSlider">ピッチ (Pitch & Speed): <span id="pitchValue">1.0</span>倍</label>
+            <input type="range" id="pitchSlider" min="0.5" max="2.0" step="0.05" value="1.0">
+            <small style="color:#a1bed0; display:block; margin-top:5px;">※1.0が標準。下げると低く遅く、上げると高く速くなります。</small>
+        </div>
+        
+        <button id="processBtn" style="width: 100%;">音声を処理して再生</button><br>
+        
+        <audio id="audioPlayer" controls></audio>
+    </div>
+
+    <script type="module">
         // 生成されたpkgフォルダから、Rustの関数をインポート
         import init, { process_audio } from './pkg/audio_backend.js';
 
@@ -56,5 +88,7 @@
             }
         });
     </script>
+</body>
+</html>
 </body>
 </html>
