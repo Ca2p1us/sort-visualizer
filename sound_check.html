@@ -1,0 +1,60 @@
+<script type="module">
+        // 生成されたpkgフォルダから、Rustの関数をインポート
+        import init, { process_audio } from './pkg/audio_backend.js';
+
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumeValue = document.getElementById('volumeValue');
+        const pitchSlider = document.getElementById('pitchSlider');
+        const pitchValue = document.getElementById('pitchValue');
+        const processBtn = document.getElementById('processBtn');
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        volumeSlider.addEventListener('input', (e) => volumeValue.textContent = e.target.value);
+        pitchSlider.addEventListener('input', (e) => pitchValue.textContent = e.target.value);
+
+        // ★ Wasmエンジンの起動を待つ
+        let wasmReady = false;
+        init().then(() => {
+            wasmReady = true;
+            console.log("WebAssembly Ready!");
+        });
+
+        processBtn.addEventListener('click', async () => {
+            if (!wasmReady) {
+                alert("システムの準備中です。少々お待ちください。");
+                return;
+            }
+
+            processBtn.disabled = true;
+            processBtn.textContent = "処理中...";
+
+            const volume = parseFloat(volumeSlider.value);
+            const pitch = parseFloat(pitchSlider.value);
+
+            try {
+                // 1. input.wav ファイルを読み込み、純粋な「バイト配列(Uint8Array)」に変換する
+                const response = await fetch('./input.wav');
+                if (!response.ok) throw new Error("input.wavが見つかりません");
+                const arrayBuffer = await response.arrayBuffer();
+                const inputBytes = new Uint8Array(arrayBuffer);
+
+                // 2. ★Rust (WebAssembly) に渡して爆速計算！通信ゼロ！
+                const outputBytes = process_audio(inputBytes, volume, pitch);
+
+                // 3. 返ってきたバイト配列をBlob（音声ファイル）にして再生
+                const blob = new Blob([outputBytes], { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(blob);
+                
+                audioPlayer.src = audioUrl;
+                audioPlayer.play();
+
+            } catch (error) {
+                alert("エラー: \n" + error.message);
+            } finally {
+                processBtn.disabled = false;
+                processBtn.textContent = "音声を処理して再生";
+            }
+        });
+    </script>
+</body>
+</html>

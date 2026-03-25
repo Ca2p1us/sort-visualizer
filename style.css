@@ -77,3 +77,41 @@ button:disabled, select:disabled {
 h2 {
     color: #00ff40
 }
+
+a {
+    color: #00ff40;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.2s;
+}
+
+a:hover {
+    color: #accede; /* マウスを乗せたらボタンと同じ水色に */
+}
+
+/* 音声処理ページのコントロールパネル */
+.control-panel {
+    background-color: rgba(255, 255, 255, 0.1); /* 半透明の白でサイバーなパネル風に */
+    padding: 20px;
+    border-radius: 10px;
+    display: inline-block;
+    text-align: left;
+    border: 1px solid #accede;
+    color: white; /* 暗い背景でも読めるように文字を白に */
+    margin-top: 10px;
+}
+
+.slider-group {
+    margin-bottom: 20px;
+}
+
+input[type="range"] {
+    width: 300px;
+    display: block;
+    margin-top: 10px;
+}
+
+audio {
+    margin-top: 20px;
+    width: 100%;
+}

@@ -1,0 +1,12 @@
+[package]
+name = "audio_backend"
+version = "0.1.0"
+edition = "2024"
+
+# サーバー用(bin)ではなく、C言語などから呼び出せるライブラリ(cdylib)としてビルドする設定
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2" # JSとRustを繋ぐ魔法のツール
+hound = "3.4"        # WAV処理用（これはそのまま使えます！）
