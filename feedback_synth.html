@@ -33,6 +33,14 @@
             flex: 1;
             margin: 0;
         }
+        #audioStatus {
+            min-height: 1.4em;
+            margin: 10px 0 0;
+            color: #a1bed0;
+        }
+        #audioStatus.error {
+            color: #ff8a8a;
+        }
     </style>
 </head>
 <body>
@@ -47,9 +55,7 @@
 
     <div class="control-panel">
         <p class="hint">
-            式: <code>y = sin(φ + feedback × y<sub>prev</sub>)</code><br>
             feedback を上げると倍音が増え、サイン波から鋸歯っぽい音色へ近づきます。<br>
-            ※パラメータ変更で波形は即更新。再生はバッファ生成方式（現行 WASM 構成の延長）です。
         </p>
 
         <div class="wave-wrap">
@@ -78,9 +84,10 @@
         </div>
 
         <div class="btn-row">
-            <button id="playBtn">再生</button>
+            <button id="playBtn" disabled>読み込み中...</button>
             <button id="stopBtn" disabled>停止</button>
         </div>
+        <p id="audioStatus" role="status">音声エンジンを読み込んでいます...</p>
     </div>
 
     <script type="module">
@@ -98,6 +105,7 @@
         const volumeValue = document.getElementById('volumeValue');
         const playBtn = document.getElementById('playBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const audioStatus = document.getElementById('audioStatus');
         const canvas = document.getElementById('waveCanvas');
         const ctx = canvas.getContext('2d');
 
@@ -105,6 +113,11 @@
         let audioCtx = null;
         let currentSource = null;
         let latestSamples = null;
+
+        function setStatus(message, isError = false) {
+            audioStatus.textContent = message;
+            audioStatus.classList.toggle('error', isError);
+        }
 
         function params() {
             return {
@@ -189,32 +202,64 @@
         }
 
         async function play() {
-            if (!wasmReady || !latestSamples) return;
-
-            if (!audioCtx) {
-                audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-            }
-            if (audioCtx.state === 'suspended') {
-                await audioCtx.resume();
+            if (!wasmReady || !latestSamples) {
+                setStatus('音声エンジンの準備が完了していません。', true);
+                return;
             }
 
-            stopPlayback();
-
-            const buffer = audioCtx.createBuffer(1, latestSamples.length, SAMPLE_RATE);
-            buffer.copyToChannel(latestSamples, 0);
-
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtx.destination);
-            source.onended = () => {
-                if (currentSource === source) {
-                    currentSource = null;
-                    stopBtn.disabled = true;
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) {
+                    throw new Error('このブラウザは Web Audio API に対応していません。');
                 }
-            };
-            currentSource = source;
-            stopBtn.disabled = false;
-            source.start();
+
+                // 固定 sampleRate を要求すると一部の端末で生成に失敗するため、
+                // ブラウザ・音声機器が選んだレートを使う。
+                if (!audioCtx || audioCtx.state === 'closed') {
+                    audioCtx = new AudioContextClass();
+                }
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+                if (audioCtx.state !== 'running') {
+                    throw new Error(`音声を開始できませんでした (${audioCtx.state})。`);
+                }
+
+                stopPlayback();
+
+                const p = params();
+                const playbackSamples = generate_feedback_fm(
+                    p.frequency,
+                    p.feedback,
+                    p.duration,
+                    audioCtx.sampleRate,
+                    p.volume,
+                );
+                const buffer = audioCtx.createBuffer(
+                    1,
+                    playbackSamples.length,
+                    audioCtx.sampleRate,
+                );
+                buffer.getChannelData(0).set(playbackSamples);
+
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.onended = () => {
+                    if (currentSource === source) {
+                        currentSource = null;
+                        stopBtn.disabled = true;
+                        setStatus('再生が終了しました。');
+                    }
+                };
+                currentSource = source;
+                stopBtn.disabled = false;
+                source.start();
+                setStatus(`再生中 (${audioCtx.sampleRate} Hz)`);
+            } catch (error) {
+                console.error('Audio playback failed:', error);
+                setStatus(`再生エラー: ${error.message}`, true);
+            }
         }
 
         [freqSlider, feedbackSlider, durationSlider, volumeSlider].forEach((el) => {
@@ -227,11 +272,20 @@
         playBtn.addEventListener('click', play);
         stopBtn.addEventListener('click', stopPlayback);
 
-        init().then(() => {
-            wasmReady = true;
-            syncLabels();
-            regenerate();
-        });
+        init()
+            .then(() => {
+                wasmReady = true;
+                syncLabels();
+                regenerate();
+                playBtn.disabled = false;
+                playBtn.textContent = '再生';
+                setStatus('準備完了。再生ボタンを押してください。');
+            })
+            .catch((error) => {
+                console.error('WASM initialization failed:', error);
+                playBtn.textContent = '読み込み失敗';
+                setStatus(`WASM 読み込みエラー: ${error.message}`, true);
+            });
     </script>
 </body>
 </html>
