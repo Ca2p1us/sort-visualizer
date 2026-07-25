@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>自己フィードバック FM</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .wave-wrap {
+            margin: 16px 0 8px;
+            background: #0a0a2a;
+            border: 1px solid #accede;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #waveCanvas {
+            display: block;
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(180deg, #0d1238 0%, #101045 100%);
+        }
+        .hint {
+            color: #a1bed0;
+            font-size: 0.85rem;
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+        .btn-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .btn-row button {
+            flex: 1;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div style="text-align: left; padding: 10px 20px;">
+        <a href="index.html">⬅ ソート可視化へ</a>
+        &nbsp;|&nbsp;
+        <a href="sound_check.html">音声パラメータ体験へ</a>
+    </div>
+
+    <h2>自己フィードバック FM</h2>
+
+    <div class="control-panel">
+        <p class="hint">
+            式: <code>y = sin(φ + feedback × y<sub>prev</sub>)</code><br>
+            feedback を上げると倍音が増え、サイン波から鋸歯っぽい音色へ近づきます。<br>
+            ※パラメータ変更で波形は即更新。再生はバッファ生成方式（現行 WASM 構成の延長）です。
+        </p>
+
+        <div class="wave-wrap">
+            <canvas id="waveCanvas" width="640" height="180"></canvas>
+        </div>
+
+        <div class="slider-group">
+            <label for="freqSlider">周波数: <span id="freqValue">220</span> Hz</label>
+            <input type="range" id="freqSlider" min="55" max="880" step="1" value="220">
+        </div>
+
+        <div class="slider-group">
+            <label for="feedbackSlider">自己フィードバック: <span id="feedbackValue">0.00</span></label>
+            <input type="range" id="feedbackSlider" min="0" max="4" step="0.01" value="0">
+            <small class="hint">0 = 純粋なサイン波 / 2〜3 付近で倍音が豊かに / 大きすぎると歪む</small>
+        </div>
+
+        <div class="slider-group">
+            <label for="durationSlider">長さ: <span id="durationValue">1.0</span> 秒</label>
+            <input type="range" id="durationSlider" min="0.2" max="3" step="0.1" value="1.0">
+        </div>
+
+        <div class="slider-group">
+            <label for="volumeSlider">音量: <span id="volumeValue">0.4</span></label>
+            <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.4">
+        </div>
+
+        <div class="btn-row">
+            <button id="playBtn">再生</button>
+            <button id="stopBtn" disabled>停止</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import init, { generate_feedback_fm } from './pkg/audio_backend.js';
+
+        const SAMPLE_RATE = 44100;
+
+        const freqSlider = document.getElementById('freqSlider');
+        const feedbackSlider = document.getElementById('feedbackSlider');
+        const durationSlider = document.getElementById('durationSlider');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const freqValue = document.getElementById('freqValue');
+        const feedbackValue = document.getElementById('feedbackValue');
+        const durationValue = document.getElementById('durationValue');
+        const volumeValue = document.getElementById('volumeValue');
+        const playBtn = document.getElementById('playBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let wasmReady = false;
+        let audioCtx = null;
+        let currentSource = null;
+        let latestSamples = null;
+
+        function params() {
+            return {
+                frequency: parseFloat(freqSlider.value),
+                feedback: parseFloat(feedbackSlider.value),
+                duration: parseFloat(durationSlider.value),
+                volume: parseFloat(volumeSlider.value),
+            };
+        }
+
+        function syncLabels() {
+            const p = params();
+            freqValue.textContent = String(p.frequency);
+            feedbackValue.textContent = p.feedback.toFixed(2);
+            durationValue.textContent = p.duration.toFixed(1);
+            volumeValue.textContent = p.volume.toFixed(2);
+        }
+
+        function regenerate() {
+            if (!wasmReady) return;
+            const p = params();
+            latestSamples = generate_feedback_fm(
+                p.frequency,
+                p.feedback,
+                p.duration,
+                SAMPLE_RATE,
+                p.volume,
+            );
+            drawWaveform(latestSamples);
+        }
+
+        function drawWaveform(samples) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const mid = h / 2;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // center line
+            ctx.strokeStyle = 'rgba(161, 190, 208, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, mid);
+            ctx.lineTo(w, mid);
+            ctx.stroke();
+
+            if (!samples || samples.length === 0) return;
+
+            // Show about 4 cycles worth when possible, else full buffer
+            const p = params();
+            const samplesPerCycle = SAMPLE_RATE / Math.max(p.frequency, 1);
+            const windowLen = Math.min(
+                samples.length,
+                Math.max(64, Math.floor(samplesPerCycle * 4)),
+            );
+            // Start after fade-in so shape is stable
+            const start = Math.min(
+                Math.floor(SAMPLE_RATE * 0.02),
+                Math.max(0, samples.length - windowLen),
+            );
+
+            ctx.strokeStyle = '#00ff40';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            for (let x = 0; x < w; x++) {
+                const i = start + Math.floor((x / (w - 1)) * (windowLen - 1));
+                const y = mid - samples[i] * (mid - 8);
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        function stopPlayback() {
+            if (currentSource) {
+                try { currentSource.stop(); } catch (_) {}
+                currentSource.disconnect();
+                currentSource = null;
+            }
+            stopBtn.disabled = true;
+        }
+
+        async function play() {
+            if (!wasmReady || !latestSamples) return;
+
+            if (!audioCtx) {
+                audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+            }
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+
+            stopPlayback();
+
+            const buffer = audioCtx.createBuffer(1, latestSamples.length, SAMPLE_RATE);
+            buffer.copyToChannel(latestSamples, 0);
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.onended = () => {
+                if (currentSource === source) {
+                    currentSource = null;
+                    stopBtn.disabled = true;
+                }
+            };
+            currentSource = source;
+            stopBtn.disabled = false;
+            source.start();
+        }
+
+        [freqSlider, feedbackSlider, durationSlider, volumeSlider].forEach((el) => {
+            el.addEventListener('input', () => {
+                syncLabels();
+                regenerate();
+            });
+        });
+
+        playBtn.addEventListener('click', play);
+        stopBtn.addEventListener('click', stopPlayback);
+
+        init().then(() => {
+            wasmReady = true;
+            syncLabels();
+            regenerate();
+        });
+    </script>
+</body>
+</html>

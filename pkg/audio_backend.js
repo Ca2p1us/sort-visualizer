@@ -1,6 +1,29 @@
 /* @ts-self-types="./audio_backend.d.ts" */
 
 /**
+ * 自己フィードバック付きサイン波（フィードバック FM）を生成する。
+ *
+ * `y[n] = sin(φ[n] + feedback * y[n-1])`
+ * `φ` は周波数に応じて進む位相。
+ * feedback を上げると倍音が増え、音色が豊かになる。
+ *
+ * 戻り値は -1.0〜1.0 付近のモノラルサンプル列（Float32）。
+ * @param {number} frequency_hz
+ * @param {number} feedback
+ * @param {number} duration_secs
+ * @param {number} sample_rate
+ * @param {number} volume
+ * @returns {Float32Array}
+ */
+export function generate_feedback_fm(frequency_hz, feedback, duration_secs, sample_rate, volume) {
+    const ret = wasm.generate_feedback_fm(frequency_hz, feedback, duration_secs, sample_rate, volume);
+    var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * WAV の音量・ピッチ（再生速度）を変更する既存処理
  * @param {Uint8Array} input_bytes
  * @param {number} volume
  * @param {number} pitch
@@ -34,9 +57,22 @@ function __wbg_get_imports() {
     };
 }
 
+function getArrayF32FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
+}
+
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
+}
+
+let cachedFloat32ArrayMemory0 = null;
+function getFloat32ArrayMemory0() {
+    if (cachedFloat32ArrayMemory0 === null || cachedFloat32ArrayMemory0.byteLength === 0) {
+        cachedFloat32ArrayMemory0 = new Float32Array(wasm.memory.buffer);
+    }
+    return cachedFloat32ArrayMemory0;
 }
 
 let cachedUint8ArrayMemory0 = null;
@@ -60,6 +96,7 @@ let wasmModule, wasm;
 function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
+    cachedFloat32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;
